@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["missingFields", "questions"],
+  "properties": {
+    "missingFields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["title", "context", "need", "users", "data", "constraints", "expectedResult", "successCriteria", "contact", "interactionFormat"]
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "question"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": ["title", "context", "need", "users", "data", "constraints", "expectedResult", "successCriteria", "contact", "interactionFormat"]
+          },
+          "question": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -18,11 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Tests never touch the network: mock LLM, no ARASAAC requests, no demo data
+    # Tests never touch the network: mock LLM, no demo data
     # (also forced by src/test/resources/application.properties).
     env:
       LLM_MODE: mock
-      PICTOGRAMS_ENABLED: "false"
       DEMO_DATA_ENABLED: "false"
 
     steps:

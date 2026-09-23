@@ -1,45 +1,76 @@
 package com.qadam.config;
 
-import com.qadam.model.AdaptationProfile;
-import com.qadam.model.Lesson;
-import com.qadam.model.LessonStatus;
-import com.qadam.repository.LessonRepository;
-import com.qadam.service.DemoLessons;
+import com.qadam.model.ProposalStatus;
+import com.qadam.model.RatingLevel;
+import com.qadam.model.Task;
+import com.qadam.model.TaskStatus;
+import com.qadam.repository.ProposalRepository;
+import com.qadam.repository.TaskRepository;
+import com.qadam.repository.TeamRepository;
+import com.qadam.service.TaskService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 /**
- * Uses its own in-memory database: other test contexts share {@code jdbc:h2:mem:qadam} and may leave lessons there.
+ * The loader itself is disabled in tests ({@code qadam.demo-data.enabled=false}), so it is run by hand here.
  */
-@SpringBootTest(properties = {
-        "qadam.demo-data.enabled=true",
-        "spring.datasource.url=jdbc:h2:mem:demo-data-test;DB_CLOSE_DELAY=-1"
-})
+@SpringBootTest
 class DemoDataLoaderTest {
 
     @Autowired
-    private LessonRepository lessonRepository;
+    private TaskRepository taskRepository;
 
     @Autowired
-    private DemoDataLoader demoDataLoader;
+    private TeamRepository teamRepository;
+
+    @Autowired
+    private ProposalRepository proposalRepository;
+
+    @Autowired
+    private TaskService taskService;
+
+    private DemoDataLoader loader;
+
+    @BeforeEach
+    void setUp() {
+        proposalRepository.deleteAll();
+        taskRepository.deleteAll();
+        teamRepository.deleteAll();
+        loader = new DemoDataLoader(taskRepository, teamRepository, proposalRepository, taskService);
+    }
 
     @Test
-    void createsApprovedDemoLessonsOnceOnStartup() {
-        assertThat(lessonRepository.findAll())
-                .extracting(Lesson::getTitle, Lesson::getProfile, Lesson::getStatus)
-                .containsExactlyInAnyOrder(
-                        tuple(DemoLessons.WATER_CYCLE_TITLE, AdaptationProfile.DYSLEXIA, LessonStatus.APPROVED),
-                        tuple(DemoLessons.PLANT_PARTS_TITLE, AdaptationProfile.AUTISM, LessonStatus.APPROVED));
-        assertThat(lessonRepository.findAll())
-                .allSatisfy(lesson -> assertThat(lesson.getAdaptedContent()).isNotNull());
+    void createsDemoTasksTeamsAndProposals() {
+        loader.run(null);
 
-        demoDataLoader.run(new DefaultApplicationArguments());
+        List<Task> published = taskRepository.findAllByStatusOrderByScoreDescIdAsc(TaskStatus.PUBLISHED);
+        List<Task> drafts = taskRepository.findAllByStatusOrderByScoreDescIdAsc(TaskStatus.DRAFT);
+        assertThat(published).hasSize(5);
+        assertThat(published).extracting(Task::getLevel)
+                .containsExactlyInAnyOrder(RatingLevel.PRIORITY, RatingLevel.READY, RatingLevel.READY,
+                        RatingLevel.WORKING, RatingLevel.DRAFT);
+        assertThat(drafts).hasSize(5);
+        assertThat(drafts).extracting(Task::getScore).doesNotHaveDuplicates();
+        assertThat(teamRepository.count()).isEqualTo(5);
+        assertThat(proposalRepository.findAll())
+                .hasSize(5)
+                .allMatch(proposal -> published.stream().anyMatch(task -> task.getId().equals(proposal.getTaskId())))
+                .extracting(proposal -> proposal.getStatus())
+                .contains(ProposalStatus.PENDING, ProposalStatus.ACCEPTED, ProposalStatus.REJECTED);
+    }
 
-        assertThat(lessonRepository.count()).isEqualTo(2);
+    @Test
+    void skipsNonEmptyDatabase() {
+        loader.run(null);
+        loader.run(null);
+
+        assertThat(taskRepository.count()).isEqualTo(10);
+        assertThat(teamRepository.count()).isEqualTo(5);
     }
 }

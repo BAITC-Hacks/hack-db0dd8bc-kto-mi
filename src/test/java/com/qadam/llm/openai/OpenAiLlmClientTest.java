@@ -3,12 +3,13 @@ package com.qadam.llm.openai;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.qadam.dto.AdaptedLesson;
-import com.qadam.dto.Section;
-import com.qadam.llm.AdaptationPrompt;
+import com.qadam.dto.FieldAnswer;
+import com.qadam.dto.TaskAnalysis;
+import com.qadam.dto.TaskCard;
 import com.qadam.llm.LlmException;
 import com.qadam.llm.LlmInvalidResponseException;
-import com.qadam.model.AdaptationProfile;
+import com.qadam.llm.TaskPrompts;
+import com.qadam.model.Industry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -37,18 +38,31 @@ class OpenAiLlmClientTest {
 
     private static final String BASE_URL = "https://api.openai.test/v1";
     private static final String MODEL = "test-model";
+    private static final String DRAFT = "Мы сеть кофеен. Хотим понять, почему падают продажи.";
 
-    private static final String LESSON_JSON = """
+    private static final String ANALYSIS_JSON = """
             {
-              "sentences": [
-                {"text": "Сначала Солнце нагревает воду.", "keywords": ["Солнце"], "section": "FIRST"}
-              ],
-              "cards": [
-                {"word": "вода", "explanation": "Вода есть в реке."}
-              ],
-              "quiz": [
-                {"question": "Что нагревает воду?", "options": ["Солнце", "Луна", "Ветер"], "correctIndex": 0}
+              "missingFields": ["data", "contact"],
+              "questions": [
+                {"field": "data", "question": "Какие данные есть?"},
+                {"field": "contact", "question": "Как с вами связаться?"},
+                {"field": "successCriteria", "question": "Как измерить успех?"}
               ]
+            }
+            """;
+
+    private static final String CARD_JSON = """
+            {
+              "title": "Падение продаж кофеен",
+              "context": "Сеть кофеен.",
+              "need": "Понять, почему падают продажи.",
+              "users": "",
+              "data": "Выгрузка чеков за 2 года.",
+              "constraints": "",
+              "expectedResult": "",
+              "successCriteria": "",
+              "contact": "",
+              "interactionFormat": ""
             }
             """;
 
@@ -63,67 +77,73 @@ class OpenAiLlmClientTest {
                 .baseUrl(BASE_URL)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer test-key");
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new OpenAiLlmClient(builder.build(), MODEL, new AdaptationPrompt(), objectMapper);
+        client = new OpenAiLlmClient(builder.build(), MODEL, new TaskPrompts(), objectMapper);
     }
 
     @Test
-    void sendsStructuredOutputRequestAndParsesResponse() {
+    void analyzeSendsStructuredOutputRequestAndParsesResponse() {
         server.expect(requestTo(BASE_URL + "/chat/completions"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.model").value(MODEL))
                 .andExpect(jsonPath("$.messages[0].role").value("system"))
-                .andExpect(jsonPath("$.messages[0].content", containsString("Аутизм (РАС)")))
-                .andExpect(jsonPath("$.messages[0].content",
-                        containsString(AdaptationProfile.AUTISM.getAdaptationRules().getFirst())))
+                .andExpect(jsonPath("$.messages[0].content", containsString("at least 3 questions")))
                 .andExpect(jsonPath("$.messages[1].role").value("user"))
-                .andExpect(jsonPath("$.messages[1].content", containsString("Круговорот воды")))
-                .andExpect(jsonPath("$.messages[1].content", containsString("Солнце греет воду.")))
+                .andExpect(jsonPath("$.messages[1].content", containsString("Гостиницы и общепит")))
+                .andExpect(jsonPath("$.messages[1].content", containsString(DRAFT)))
                 .andExpect(jsonPath("$.response_format.type").value("json_schema"))
-                .andExpect(jsonPath("$.response_format.json_schema.name").value("adapted_lesson"))
+                .andExpect(jsonPath("$.response_format.json_schema.name").value("task_analysis"))
                 .andExpect(jsonPath("$.response_format.json_schema.strict").value(true))
-                .andExpect(jsonPath("$.response_format.json_schema.schema.required[0]").value("sentences"))
-                .andRespond(withSuccess(completion(LESSON_JSON, null, "stop"), MediaType.APPLICATION_JSON));
+                .andExpect(jsonPath("$.response_format.json_schema.schema.required[0]").value("missingFields"))
+                .andRespond(withSuccess(completion(ANALYSIS_JSON, null, "stop"), MediaType.APPLICATION_JSON));
 
-        AdaptedLesson lesson = client.adapt("Круговорот воды", "Солнце греет воду.", AdaptationProfile.AUTISM);
+        TaskAnalysis analysis = client.analyze(DRAFT, Industry.HORECA);
 
         server.verify();
-        assertThat(lesson.sentences()).singleElement().satisfies(sentence -> {
-            assertThat(sentence.text()).isEqualTo("Сначала Солнце нагревает воду.");
-            assertThat(sentence.section()).isEqualTo(Section.FIRST);
-        });
-        assertThat(lesson.cards()).singleElement().satisfies(card -> {
-            assertThat(card.word()).isEqualTo("вода");
-            assertThat(card.pictogramUrl()).isNull();
-        });
-        assertThat(lesson.quiz()).singleElement().satisfies(question -> {
-            assertThat(question.options()).containsExactly("Солнце", "Луна", "Ветер");
-            assertThat(question.correctIndex()).isZero();
-        });
+        assertThat(analysis.missingFields()).containsExactly("data", "contact");
+        assertThat(analysis.questions()).hasSize(3);
+        assertThat(analysis.questions().getFirst().field()).isEqualTo("data");
+    }
+
+    @Test
+    void buildCardSendsDraftAndAnswersAndParsesCard() {
+        server.expect(requestTo(BASE_URL + "/chat/completions"))
+                .andExpect(jsonPath("$.messages[0].content", containsString("Never add facts")))
+                .andExpect(jsonPath("$.messages[1].content", containsString("- data: Выгрузка чеков за 2 года")))
+                .andExpect(jsonPath("$.response_format.json_schema.name").value("task_card"))
+                .andRespond(withSuccess(completion(CARD_JSON, null, "stop"), MediaType.APPLICATION_JSON));
+
+        TaskCard card = client.buildCard(DRAFT, Industry.HORECA,
+                List.of(new FieldAnswer("data", "Выгрузка чеков за 2 года"), new FieldAnswer("users", "  ")));
+
+        server.verify();
+        assertThat(card.title()).isEqualTo("Падение продаж кофеен");
+        assertThat(card.data()).isEqualTo("Выгрузка чеков за 2 года.");
+        assertThat(card.users()).isEmpty();
     }
 
     @Test
     void invalidJsonContentIsReportedAsInvalidResponse() {
-        respondWith(completion("{\"sentences\": [", null, "stop"));
+        respondWith(completion("{\"missingFields\": [", null, "stop"));
 
-        assertThatThrownBy(() -> adapt()).isInstanceOf(LlmInvalidResponseException.class);
+        assertThatThrownBy(this::analyze).isInstanceOf(LlmInvalidResponseException.class);
     }
 
     @Test
     void refusalIsReportedAsInvalidResponse() {
         respondWith(completion(null, "I cannot help with that.", "stop"));
 
-        assertThatThrownBy(() -> adapt())
+        assertThatThrownBy(this::analyze)
                 .isInstanceOf(LlmInvalidResponseException.class)
                 .hasMessageContaining("refused");
     }
 
     @Test
     void truncatedResponseIsReportedAsInvalidResponse() {
-        respondWith(completion("{\"sentences\": [", null, "length"));
+        respondWith(completion("{\"missingFields\": [", null, "length"));
 
-        assertThatThrownBy(() -> adapt())
+        assertThatThrownBy(this::analyze)
                 .isInstanceOf(LlmInvalidResponseException.class)
                 .hasMessageContaining("truncated");
     }
@@ -133,14 +153,14 @@ class OpenAiLlmClientTest {
         server.expect(requestTo(BASE_URL + "/chat/completions"))
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
 
-        assertThatThrownBy(() -> adapt())
+        assertThatThrownBy(this::analyze)
                 .isInstanceOf(LlmException.class)
                 .isNotInstanceOf(LlmInvalidResponseException.class)
                 .hasMessageContaining("401");
     }
 
-    private AdaptedLesson adapt() {
-        return client.adapt("Урок", "Текст урока.", AdaptationProfile.DYSLEXIA);
+    private TaskAnalysis analyze() {
+        return client.analyze(DRAFT, Industry.RETAIL);
     }
 
     private void respondWith(String body) {

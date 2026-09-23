@@ -14,7 +14,7 @@
     <artifactId>qadam</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>Qadam</name>
-    <description>Adaptation of learning materials for children with developmental differences</description>
+    <description>Business task platform for student teams</description>
 
     <properties>
         <java.version>21</java.version>
