@@ -1,131 +1,98 @@
 package com.qadam.llm.mock;
 
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.qadam.dto.AdaptedLesson;
-import com.qadam.dto.Question;
-import com.qadam.dto.Section;
-import com.qadam.dto.Sentence;
-import com.qadam.model.AdaptationProfile;
-import jakarta.validation.Validation;
-import jakarta.validation.Validator;
-import jakarta.validation.ValidatorFactory;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import com.qadam.dto.ClarifyingQuestion;
+import com.qadam.dto.FieldAnswer;
+import com.qadam.dto.TaskAnalysis;
+import com.qadam.dto.TaskCard;
+import com.qadam.model.CardField;
+import com.qadam.model.Industry;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.Arrays;
-import java.util.stream.Stream;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MockLlmClientTest {
 
-    private static final String WATER_CYCLE_TITLE = "Круговорот воды в природе";
-    private static final String PLANT_PARTS_TITLE = "Части растения";
-    private static final String UNKNOWN_TITLE = "Таблица умножения";
+    private static final String DRAFT = "Мы сеть из 12 кофеен в Алматы. "
+            + "Хотим понять, почему в будни после обеда падают продажи. "
+            + "Есть выгрузка чеков из кассовой системы за 2 года в Excel.";
 
-    private static ValidatorFactory factory;
-    private static Validator validator;
-    private static MockLlmClient client;
+    private final MockLlmClient client = new MockLlmClient();
 
-    @BeforeAll
-    static void setUp() {
-        factory = Validation.buildDefaultValidatorFactory();
-        validator = factory.getValidator();
-        client = new MockLlmClient(JsonMapper.builder().findAndAddModules().build());
-    }
+    @Test
+    void buildCardUsesOnlySentencesFromTheDraft() {
+        TaskCard card = client.buildCard(DRAFT, Industry.HORECA, List.of());
 
-    @AfterAll
-    static void tearDown() {
-        factory.close();
-    }
-
-    static Stream<Arguments> allExamples() {
-        return Stream.of(WATER_CYCLE_TITLE, PLANT_PARTS_TITLE, UNKNOWN_TITLE)
-                .flatMap(title -> Arrays.stream(AdaptationProfile.values())
-                        .map(profile -> Arguments.of(title, profile)));
-    }
-
-    @ParameterizedTest(name = "{0} / {1}")
-    @MethodSource("allExamples")
-    void examplesAreValidAndFollowCommonRules(String title, AdaptationProfile profile) {
-        AdaptedLesson lesson = client.adapt(title, "text", profile);
-
-        assertThat(validator.validate(lesson)).isEmpty();
-        assertThat(lesson.cards()).hasSizeBetween(5, 8);
-        assertThat(lesson.cards()).allSatisfy(card -> {
-            assertThat(card.word()).doesNotContain(" ");
-            assertThat(card.pictogramUrl()).isNull();
-        });
-        assertThat(lesson.quiz()).hasSizeBetween(3, 5);
-        assertThat(lesson.quiz()).extracting(Question::options).allSatisfy(options -> assertThat(options).hasSize(3));
-        assertThat(lesson.sentences()).allSatisfy(sentence ->
-                assertThat(sentence.keywords()).allSatisfy(keyword ->
-                        assertThat(sentence.text()).contains(keyword)));
-    }
-
-    @ParameterizedTest(name = "{0} / {1}")
-    @MethodSource("allExamples")
-    void examplesFollowProfileRules(String title, AdaptationProfile profile) {
-        AdaptedLesson lesson = client.adapt(title, "text", profile);
-
-        switch (profile) {
-            case DYSLEXIA -> assertThat(lesson.sentences()).allSatisfy(sentence -> {
-                assertThat(sentence.section()).isNull();
-                assertThat(wordCount(sentence.text())).isLessThanOrEqualTo(12);
-            });
-            case AUTISM -> {
-                assertThat(lesson.sentences()).extracting(Sentence::section)
-                        .doesNotContainNull()
-                        .contains(Section.FIRST, Section.THEN, Section.FINALLY)
-                        .isSortedAccordingTo(Enum::compareTo);
-            }
-        }
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {WATER_CYCLE_TITLE, "круговорот воды", "  КРУГОВОРОТ ВОДЫ В ПРИРОДЕ! "})
-    void waterCycleTitlesSelectWaterCycleExample(String title) {
-        assertThat(MockLlmClient.lessonKey(title)).isEqualTo(MockLlmClient.WATER_CYCLE);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {PLANT_PARTS_TITLE, "части растений", "Урок: «Части растения»"})
-    void plantPartsTitlesSelectPlantPartsExample(String title) {
-        assertThat(MockLlmClient.lessonKey(title)).isEqualTo(MockLlmClient.PLANT_PARTS);
+        assertThat(card.context()).isEqualTo("Мы сеть из 12 кофеен в Алматы.");
+        assertThat(card.need()).isEqualTo("Хотим понять, почему в будни после обеда падают продажи.");
+        assertThat(card.data()).isEqualTo("Есть выгрузка чеков из кассовой системы за 2 года в Excel.");
+        assertThat(card.title()).isEqualTo("Хотим понять, почему в будни после обеда падают продажи");
+        assertThat(List.of(card.users(), card.constraints(), card.expectedResult(), card.successCriteria(),
+                card.contact(), card.interactionFormat())).allMatch(String::isEmpty);
     }
 
     @Test
-    void unknownLessonReturnsDemoStub() {
-        assertThat(MockLlmClient.lessonKey(UNKNOWN_TITLE)).isEqualTo(MockLlmClient.DEMO);
-        assertThat(MockLlmClient.lessonKey(null)).isEqualTo(MockLlmClient.DEMO);
+    void buildCardAddsAnswersToTheirFieldsAndIgnoresBlankAnswers() {
+        TaskCard card = client.buildCard(DRAFT, Industry.HORECA, List.of(
+                new FieldAnswer("need", "Нужны рекомендации по акциям."),
+                new FieldAnswer("contact", "ops@example.com"),
+                new FieldAnswer("users", "   ")));
 
-        for (AdaptationProfile profile : AdaptationProfile.values()) {
-            AdaptedLesson lesson = client.adapt(UNKNOWN_TITLE, "Любой текст", profile);
-            assertThat(lesson.sentences().getFirst().text()).contains("демо-режиме");
-        }
+        assertThat(card.need()).isEqualTo(
+                "Хотим понять, почему в будни после обеда падают продажи. Нужны рекомендации по акциям.");
+        assertThat(card.contact()).isEqualTo("ops@example.com");
+        assertThat(card.users()).isEmpty();
     }
 
     @Test
-    void knownLessonsAreNotDemoStubs() {
-        for (AdaptationProfile profile : AdaptationProfile.values()) {
-            assertThat(client.adapt(WATER_CYCLE_TITLE, "text", profile).sentences())
-                    .extracting(Sentence::text)
-                    .noneMatch(text -> text.contains("демо"))
-                    .anyMatch(text -> text.contains("пар"));
-            assertThat(client.adapt(PLANT_PARTS_TITLE, "text", profile).sentences())
-                    .extracting(Sentence::text)
-                    .anyMatch(text -> text.contains("стебель"));
-        }
+    void analyzeAsksAboutMissingFieldsOnly() {
+        TaskAnalysis analysis = client.analyze(DRAFT, Industry.HORECA);
+
+        assertThat(analysis.missingFields()).containsExactly("users", "constraints", "expectedResult",
+                "successCriteria", "contact", "interactionFormat");
+        assertThat(analysis.questions()).extracting(ClarifyingQuestion::field)
+                .containsExactlyElementsOf(analysis.missingFields());
+        assertThat(analysis.questions()).allMatch(question -> !question.question().isBlank());
     }
 
-    private static long wordCount(String text) {
-        return Arrays.stream(text.split("\\s+"))
-                .filter(token -> token.codePoints().anyMatch(Character::isLetterOrDigit))
-                .count();
+    @Test
+    void analyzeAlwaysAsksAtLeastThreeQuestions() {
+        String fullDraft = DRAFT
+                + " Пользователи — управляющие кофейнями и маркетолог."
+                + " Ограничение: бюджет на акции не более ста тысяч."
+                + " На выходе ждём дашборд с продажами по часам."
+                + " Успех — выручка после обеда растёт заметно."
+                + " Почта: ops@example.com."
+                + " Готовы на онлайн-встречи раз в неделю.";
+
+        TaskAnalysis analysis = client.analyze(fullDraft, Industry.HORECA);
+
+        assertThat(analysis.missingFields()).isEmpty();
+        assertThat(analysis.questions()).hasSizeGreaterThanOrEqualTo(TaskAnalysis.MIN_QUESTIONS);
+        assertThat(analysis.questions().getFirst().field()).isEqualTo("successCriteria");
+    }
+
+    @Test
+    void classifiesSentencesByKeywords() {
+        assertThat(MockLlmClient.classify("Пишите на team@example.com")).isEqualTo(CardField.CONTACT);
+        assertThat(MockLlmClient.classify("Сократить время ожидания на 20%")).isEqualTo(CardField.SUCCESS_CRITERIA);
+        assertThat(MockLlmClient.classify("Бюджет ограничен")).isEqualTo(CardField.CONSTRAINTS);
+        assertThat(MockLlmClient.classify("Просто текст без подсказок")).isEqualTo(CardField.CONTEXT);
+    }
+
+    @Test
+    void longTitleIsCutAtWordBoundary() {
+        String title = MockLlmClient.title("Слово ".repeat(30) + "конец.");
+
+        assertThat(title).endsWith("…").hasSizeLessThanOrEqualTo(MockLlmClient.TITLE_MAX_LENGTH + 1);
+        assertThat(MockLlmClient.title("Короткое название!")).isEqualTo("Короткое название");
+    }
+
+    @Test
+    void isDeterministic() {
+        assertThat(client.analyze(DRAFT, Industry.RETAIL)).isEqualTo(client.analyze(DRAFT, Industry.RETAIL));
+        assertThat(client.buildCard(DRAFT, Industry.RETAIL, List.of()))
+                .isEqualTo(client.buildCard(DRAFT, Industry.RETAIL, List.of()));
     }
 }

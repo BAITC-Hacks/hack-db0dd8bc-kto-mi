@@ -1,10 +1,13 @@
 package com.qadam.config;
 
-import com.qadam.dto.CreateLessonRequest;
-import com.qadam.model.AdaptationProfile;
-import com.qadam.repository.LessonRepository;
-import com.qadam.service.DemoLessons;
-import com.qadam.service.LessonService;
+import com.qadam.model.Proposal;
+import com.qadam.model.Task;
+import com.qadam.model.Team;
+import com.qadam.repository.ProposalRepository;
+import com.qadam.repository.TaskRepository;
+import com.qadam.repository.TeamRepository;
+import com.qadam.service.DemoData;
+import com.qadam.service.TaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -15,8 +18,8 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Fills an empty database with two approved demo lessons, adapted through the regular {@link LessonService}.
- * Disabled with {@code qadam.demo-data.enabled=false}. A failed adaptation is logged and does not stop the app.
+ * Fills an empty database with {@link DemoData}: tasks (rated by the regular {@link TaskService}),
+ * teams and proposals. No LLM calls. Disabled with {@code qadam.demo-data.enabled=false}.
  */
 @Slf4j
 @Component
@@ -24,28 +27,40 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DemoDataLoader implements ApplicationRunner {
 
-    static final List<CreateLessonRequest> DEMO_LESSONS = List.of(
-            new CreateLessonRequest(DemoLessons.WATER_CYCLE_TITLE, DemoLessons.WATER_CYCLE_TEXT,
-                    AdaptationProfile.DYSLEXIA),
-            new CreateLessonRequest(DemoLessons.PLANT_PARTS_TITLE, DemoLessons.PLANT_PARTS_TEXT,
-                    AdaptationProfile.AUTISM));
-
-    private final LessonRepository lessonRepository;
-    private final LessonService lessonService;
+    private final TaskRepository taskRepository;
+    private final TeamRepository teamRepository;
+    private final ProposalRepository proposalRepository;
+    private final TaskService taskService;
 
     @Override
     public void run(ApplicationArguments args) {
-        if (lessonRepository.count() > 0) {
-            log.info("Database already has lessons, demo data skipped");
+        if (taskRepository.count() > 0 || teamRepository.count() > 0) {
+            log.info("Database is not empty, demo data skipped");
             return;
         }
-        for (CreateLessonRequest request : DEMO_LESSONS) {
-            try {
-                lessonService.approve(lessonService.create(request).id());
-                log.info("Demo lesson '{}' ({}) created and approved", request.title(), request.profile());
-            } catch (RuntimeException e) {
-                log.warn("Failed to create demo lesson '{}': {}", request.title(), e.getMessage());
-            }
+        List<Task> tasks = DemoData.TASKS.stream()
+                .map(demo -> taskService.save(demo.industry(), demo.draftText(), demo.card(), demo.status()))
+                .toList();
+        List<Team> teams = DemoData.TEAMS.stream()
+                .map(demo -> {
+                    Team team = new Team(demo.name(), demo.interests(), demo.skills(), demo.technologies());
+                    team.setPoints(demo.points());
+                    return teamRepository.save(team);
+                })
+                .toList();
+        for (DemoData.DemoProposal demo : DemoData.PROPOSALS) {
+            Proposal proposal = new Proposal();
+            proposal.setTaskId(tasks.get(demo.task()).getId());
+            proposal.setTeamId(teams.get(demo.team()).getId());
+            proposal.setIdea(demo.idea());
+            proposal.setPlan(demo.plan());
+            proposal.setDuration(demo.duration());
+            proposal.setPrototypeUrl(demo.prototypeUrl());
+            proposal.setStatus(demo.status());
+            proposal.setConfirmedMilestones(demo.confirmedMilestones());
+            proposalRepository.save(proposal);
         }
+        log.info("Demo data created: {} tasks, {} teams, {} proposals",
+                tasks.size(), teams.size(), DemoData.PROPOSALS.size());
     }
 }
