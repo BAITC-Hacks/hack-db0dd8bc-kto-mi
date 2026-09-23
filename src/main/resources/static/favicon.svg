@@ -1,1 +1,5 @@
+<<<<<<< HEAD
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="12" fill="#2859df"/><path d="M25 12v22M25 16c-5-7-15-2-15 5s10 11 15 3" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+=======
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="12" fill="#42765c"/><path d="M10 29v-6h7v-7h7V9h7v20Z" fill="#fff"/></svg>
+>>>>>>> origin/main
