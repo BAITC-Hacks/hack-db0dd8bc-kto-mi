@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sentences", "cards", "quiz"],
+  "properties": {
+    "sentences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "keywords", "section"],
+        "properties": {
+          "text": { "type": "string" },
+          "keywords": { "type": "array", "items": { "type": "string" } },
+          "section": {
+            "type": ["string", "null"],
+            "enum": ["FIRST", "THEN", "FINALLY", null]
+          }
+        }
+      }
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["word", "explanation"],
+        "properties": {
+          "word": { "type": "string" },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "quiz": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "options", "correctIndex"],
+        "properties": {
+          "question": { "type": "string" },
+          "options": { "type": "array", "items": { "type": "string" } },
+          "correctIndex": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
