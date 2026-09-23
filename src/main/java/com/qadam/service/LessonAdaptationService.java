@@ -5,6 +5,7 @@ import com.qadam.llm.LlmClient;
 import com.qadam.llm.LlmException;
 import com.qadam.llm.LlmInvalidResponseException;
 import com.qadam.model.AdaptationProfile;
+import com.qadam.pictogram.PictogramEnricher;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -17,6 +18,7 @@ import java.util.Set;
 /**
  * Adapts a lesson through the {@link LlmClient} and makes sure the result is a valid {@link AdaptedLesson}.
  * An unparseable or invalid result is retried once; an unavailable LLM is not retried.
+ * The valid result is enriched with pictograms by {@link PictogramEnricher}.
  */
 @Slf4j
 @Service
@@ -27,8 +29,13 @@ public class LessonAdaptationService {
 
     private final LlmClient llmClient;
     private final Validator validator;
+    private final PictogramEnricher pictogramEnricher;
 
     public AdaptedLesson adapt(String title, String text, AdaptationProfile profile) {
+        return pictogramEnricher.enrich(adaptedByLlm(title, text, profile));
+    }
+
+    private AdaptedLesson adaptedByLlm(String title, String text, AdaptationProfile profile) {
         RuntimeException lastError = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
