@@ -26,3 +26,7 @@ qadam:
       model: ${OPENAI_MODEL:gpt-4o-mini}
       timeout: 60s
       base-url: https://api.openai.com/v1
+  pictograms:
+    enabled: ${PICTOGRAMS_ENABLED:true}
+    locale: ru
+    timeout: 5s

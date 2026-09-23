@@ -32,7 +32,7 @@ Flow:
 | `repository` | Spring Data JPA repositories                                 |
 | `service`    | Business logic (adaptation workflow, teacher approval)       |
 | `llm`        | `LlmClient` abstraction, prompt; `llm.mock` and `llm.openai` implementations |
-| `pictogram`  | Pictogram lookup for cards                                   |
+| `pictogram`  | ARASAAC pictogram lookup (`PictogramService`) and card enrichment (`PictogramEnricher`) |
 
 ## Commands (Windows / PowerShell)
 ```powershell
@@ -51,6 +51,8 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 - `LLM_MODE` → `qadam.llm.mode`: `mock` (default, no network) or `openai`
 - `OPENAI_API_KEY` — required only when `LLM_MODE=openai`; the app refuses to start without it
 - `OPENAI_MODEL` — OpenAI chat model, default `gpt-4o-mini` (must support structured output)
+- `PICTOGRAMS_ENABLED` → `qadam.pictograms.enabled`: `true` (default) or `false` to skip all ARASAAC requests
+  (offline, tests)
 - See `.env.example`. Local overrides go to `.env` / `application-local.yml` (both git-ignored).
 
 ## LLM layer
@@ -64,6 +66,19 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
     (`AdaptedLessonSchemaTest` checks this).
   - `mock/<lesson>-<profile>.json` — prepared adaptations for the mock mode
     («Круговорот воды в природе», «Части растения», and a `demo` stub for any other title).
+
+## Pictograms (ARASAAC)
+- `LessonAdaptationService` passes the validated lesson to `PictogramEnricher`, which sets
+  `Card.pictogramUrl` for all cards in parallel (virtual threads); not found → `null`.
+- `PictogramService.findPictogramUrl(word)` normalizes the word (trim, edge punctuation, lower case),
+  calls `GET https://api.arasaac.org/v1/pictograms/ru/search/{word}` and takes the first result's `_id`.
+  Image URL: `https://static.arasaac.org/pictograms/{id}/{id}_500.png`.
+  An unknown word returns HTTP 404 with `[]`.
+- In-memory cache per normalized word, including "not found". Network and 5xx errors are not cached.
+  Timeout 5s (`qadam.pictograms.timeout`). The service never throws; failures are logged as warnings.
+- License: ARASAAC pictograms are CC BY-NC-SA (non-commercial, share-alike).
+  **The frontend must show the ARASAAC attribution (README → Credits) in the footer of every page
+  that displays pictograms.**
 
 ## Code rules
 - English only in code, comments, identifiers, commit messages and PR descriptions.
