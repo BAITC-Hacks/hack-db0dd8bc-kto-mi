@@ -1,19 +1,20 @@
 # Qadam
 
-Hackathon service that adapts learning materials for children with developmental
-differences (dyslexia, autism).
+Hackathon MVP: a platform of business tasks for student teams.
 
 Flow:
-1. A teacher pastes lesson text and picks a profile (e.g. dyslexia, autism).
-2. An LLM returns an adapted text, cards with pictograms and a simple quiz.
-3. The teacher reviews and approves the material.
-4. The child sees the approved material in a simple interface.
+1. A business describes a task in its own words (draft) and picks an industry.
+2. The AI finds which card fields are missing and asks at least 3 clarifying questions.
+3. The AI builds a task card strictly from the draft and the answers (no invented facts; unknown → empty field).
+4. A transparent, deterministic rating (no AI) shows the card quality and what to fill in; the business edits the card.
+5. The business publishes the task manually; it appears in the catalog.
+6. Student teams get recommendations and send proposals; the business accepts/rejects them manually
+   and confirms milestones (+10 points to the team).
 
 ## Project name
-- The project is called **Qadam** (Kazakh for "step"): a child learns step by step, at their own pace.
+- The project is called **Qadam** (Kazakh for "step"): from a raw idea to a ready task step by step.
 - Hackathon team: «Kto mi?». The repository is named `hack-db0dd8bc-kto-mi`, but the UI,
   README and all documentation always use the name Qadam.
-- Slogan: «Qadam — каждый урок понятен каждому ребёнку».
 
 ## Stack
 - Java 21, Spring Boot 3.5, Maven (via Maven Wrapper)
@@ -23,16 +24,18 @@ Flow:
 - JUnit 5, Spring Boot Test
 
 ## Package structure (`com.qadam`)
-| Package      | Purpose                                                      |
-|--------------|--------------------------------------------------------------|
-| `config`     | Spring configuration, typed properties, OpenAPI, CORS        |
-| `controller` | REST controllers (`/api/**`)                                  |
-| `dto`        | Request/response objects (prefer Java records)               |
-| `model`      | JPA entities                                                 |
-| `repository` | Spring Data JPA repositories                                 |
-| `service`    | Business logic (adaptation workflow, teacher approval)       |
-| `llm`        | `LlmClient` abstraction, prompt; `llm.mock` and `llm.openai` implementations |
-| `pictogram`  | ARASAAC pictogram lookup (`PictogramService`) and card enrichment (`PictogramEnricher`) |
+| Package      | Purpose                                                                          |
+|--------------|----------------------------------------------------------------------------------|
+| `config`     | Spring configuration, typed properties, OpenAPI, demo data loader                 |
+| `controller` | REST controllers (`/api/**`), `GlobalExceptionHandler`, Swagger examples          |
+| `dto`        | Request/response records (`TaskCard`, `TaskAnalysis`, `Rating`, …)               |
+| `model`      | JPA entities `Task`, `Team`, `Proposal`; enums `CardField`, `Industry`, `RatingLevel`, statuses |
+| `repository` | Spring Data JPA repositories                                                     |
+| `service`    | Business logic: `TaskService`, `TaskAiService`, `RatingService`, `TeamService`, `TaskMatcher`, `ProposalService`, `DemoData` |
+| `llm`        | `LlmClient` abstraction, `TaskPrompts`; `llm.mock` and `llm.openai` implementations |
+
+The frontend lives in `src/main/resources/static` and is owned by another team member — do not edit it.
+Do not edit `AGENTS.md`.
 
 ## Commands (Windows / PowerShell)
 ```powershell
@@ -50,7 +53,7 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 ## CI and Docker
 - CI: `.github/workflows/ci.yml` (GitHub Actions) runs on push to `main` and on every pull request:
   Temurin JDK 21 with Maven cache, `./mvnw -B -ntp clean verify`, env `LLM_MODE=mock`,
-  `PICTOGRAMS_ENABLED=false`, `DEMO_DATA_ENABLED=false` (tests must never need the network).
+  `DEMO_DATA_ENABLED=false` (tests must never need the network).
   The JaCoCo report is uploaded as the `jacoco-report` build artifact.
 - Coverage: `jacoco-maven-plugin` in `pom.xml`, report at `target/site/jacoco/index.html` on `verify`.
   No coverage threshold — the build must not fail on coverage.
@@ -59,8 +62,7 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
   `-DskipTests` (tests run in CI); runtime is `eclipse-temurin:21-jre-alpine` as non-root user `qadam`,
   port 8080, JVM flags via `JAVA_OPTS`. Keep `.dockerignore` up to date (no `target`, `.git`, `.idea`, `.env`).
 - `docker-compose.yml`: service `qadam`, `8080:8080`, `LLM_MODE` (default `mock`), `OPENAI_API_KEY`,
-  `OPENAI_MODEL`, `PICTOGRAMS_ENABLED` (default `true`), `DEMO_DATA_ENABLED` — taken from `.env` if present;
-  healthcheck `wget` on `/api/health`.
+  `OPENAI_MODEL`, `DEMO_DATA_ENABLED` — taken from `.env` if present; healthcheck `wget` on `/api/health`.
   ```bash
   docker compose up --build
   ```
@@ -69,63 +71,90 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 - `LLM_MODE` → `qadam.llm.mode`: `mock` (default, no network) or `openai`
 - `OPENAI_API_KEY` — required only when `LLM_MODE=openai`; the app refuses to start without it
 - `OPENAI_MODEL` — OpenAI chat model, default `gpt-4o-mini` (must support structured output)
-- `PICTOGRAMS_ENABLED` → `qadam.pictograms.enabled`: `true` (default) or `false` to skip all ARASAAC requests
-  (offline, tests)
-- `DEMO_DATA_ENABLED` → `qadam.demo-data.enabled`: `true` (default) creates two approved demo lessons
-  on startup if the DB is empty (`DemoDataLoader`, via the regular `LessonService`; texts in `DemoLessons`)
+- `DEMO_DATA_ENABLED` → `qadam.demo-data.enabled`: `true` (default) fills an empty DB on startup
+  (`DemoDataLoader`, content in `service/DemoData`): 5 drafts of different completeness, 5 published tasks
+  covering all 4 rating levels, 5 teams, 5 proposals. No LLM calls. Synthetic Russian texts, no personal data
+  (contacts use `example.com`).
 - `spring.web.locale=ru` with a fixed locale resolver: default Bean Validation messages are always Russian.
-- Tests: `src/test/resources/application.properties` forces `mock` LLM, pictograms off and demo data off.
-  All Spring test contexts share `jdbc:h2:mem:qadam`, so tests clean the repository in `@BeforeEach`.
+- Tests: `src/test/resources/application.properties` forces `mock` LLM and demo data off.
+  All Spring test contexts share `jdbc:h2:mem:qadam`, so tests clean the repositories in `@BeforeEach`.
 - See `.env.example`. Local overrides go to `.env` / `application-local.yml` (both git-ignored).
 
+## Domain
+- `Task`: `id, industry, draftText, status (DRAFT|PUBLISHED), createdAt, updatedAt` + card fields
+  `title, context, need, users, data, constraints, expectedResult, successCriteria, contact, interactionFormat`
+  + stored `score`/`level` (recalculated on every card change, used for catalog sorting/filtering).
+- `TaskCard` (dto record) is the card: trims values, `null` → `""`. `CardField` enum holds the JSON codes,
+  Russian labels and the "filled meaningfully" rule. `CardField.CODE_PATTERN` must list all codes.
+- `Team`: `id, name, interests, skills, technologies` (string lists stored as JSON), `points`.
+- `Proposal`: `id, taskId, teamId, idea, plan, duration, prototypeUrl, status (PENDING|ACCEPTED|REJECTED),
+  confirmedMilestones, createdAt`.
+- `Industry` enum: API code = constant name, `displayName` in Russian (`GET /api/industries`).
+
+## Rating (`RatingService`, no AI)
+| Criterion              | Points | Rule                                                              |
+|------------------------|--------|-------------------------------------------------------------------|
+| Контекст и потребность | 20     | context 10 + need 10                                              |
+| Данные и материалы     | 20     | data                                                              |
+| Ожидаемый результат    | 15     | expectedResult                                                    |
+| Критерии успеха        | 15     | 15 if it has a digit or `%`, otherwise 7 (half, rounded down)     |
+| Ограничения            | 10     | constraints                                                       |
+| Пользователи           | 10     | users                                                             |
+| Связь с бизнесом       | 10     | contact 5 + interactionFormat 5                                   |
+- A field counts if it is not blank and at least 15 characters (contact: 5).
+- Levels (`RatingLevel`): `DRAFT` 0–39 «Черновик», `WORKING` 40–69 «Рабочая задача»,
+  `READY` 70–89 «Готова к работе», `PRIORITY` 90–100 «Приоритетная».
+- `Rating`: `{score, level, levelName, breakdown[{criterion, points, maxPoints, reason}], missing[field codes],
+  tips[strings with points]}`. Every task response contains `rating`.
+
 ## REST API
-`LessonController` / `ProfileController` delegate to `LessonService` (lesson workflow; returns DTOs only).
-| Method & path                      | Result                                                                  |
-|------------------------------------|-------------------------------------------------------------------------|
-| `POST /api/lessons`                | `{title, text, profile}` → adapt (LLM + pictograms) → 201, `DRAFT`       |
-| `GET /api/lessons`                 | summaries `{id, title, profile, status, createdAt}`, newest first        |
-| `GET /api/lessons/{id}`            | full lesson with original text and adapted `content`                    |
-| `PUT /api/lessons/{id}/content`    | body `AdaptedLesson`; replaces content, status → `DRAFT`                 |
-| `POST /api/lessons/{id}/approve`   | status → `APPROVED`                                                     |
-| `POST /api/lessons/{id}/regenerate`| adapt the original text again, status → `DRAFT`                         |
-| `DELETE /api/lessons/{id}`         | 204                                                                     |
-| `GET /api/lessons/{id}/student`    | `{title, displaySettings, content}`; 403 unless `APPROVED`              |
-| `GET /api/profiles`                | `{code, name, displaySettings}` per `AdaptationProfile`                 |
-- Validation: title 3–120, text 50–5000 chars, profile required (Russian messages on `CreateLessonRequest`).
-- The LLM call runs outside DB transactions; if adaptation fails nothing is saved/changed.
+Controllers stay thin and delegate to services. The frontend is built against these exact paths and fields.
+| Method & path                               | Result                                                                  |
+|---------------------------------------------|-------------------------------------------------------------------------|
+| `POST /api/tasks/analyze`                   | `{draftText, industry}` → `{missingFields, questions[{field, question}]}`; nothing saved |
+| `POST /api/tasks`                           | `{draftText, industry, answers[{field, answer}]}` → AI card → 201, `DRAFT` |
+| `GET /api/tasks/{id}`                       | task: card fields at top level, `rating`, `needsClarification`, `clarificationNote` |
+| `PUT /api/tasks/{id}/card`                  | body `TaskCard` (all fields replaced); rating recalculated; status unchanged |
+| `POST /api/tasks/{id}/publish`              | manual publication → `PUBLISHED`                                        |
+| `GET /api/catalog?industry=&level=`         | only `PUBLISHED`, score desc; `DRAFT`-level tasks have `needsClarification=true`, note «требует уточнения» |
+| `GET /api/industries`                       | `[{code, name}]`                                                        |
+| `GET /api/teams`                            | `[{id, name, interests, skills, technologies, points}]`                 |
+| `GET /api/teams/{id}/recommendations`       | published tasks with level ≥ `WORKING`, sorted by word match (`TaskMatcher`): `[{task, matchScore, matchedKeywords}]` |
+| `POST /api/tasks/{id}/proposals`            | `{teamId, idea, plan, duration, prototypeUrl}` → 201 `PENDING`; 409 unless task `PUBLISHED`; unlimited count |
+| `GET /api/tasks/{id}/proposals`             | proposals in creation order, with `teamName`, `teamPoints`              |
+| `POST /api/proposals/{id}/accept` / `reject`| manual business decision, only from `PENDING` (else 409); several or none may be accepted |
+| `POST /api/proposals/{id}/confirm-milestone`| only `ACCEPTED` (else 409); team `points += 10`, `confirmedMilestones += 1` |
+- Validation: `draftText` 20–5000, `industry` required, answers ≤ 20 with a known `field`;
+  card fields ≤ 3000 (title ≤ 200, contact ≤ 300); proposal `idea` 10–2000, `plan` 10–4000, `duration` required,
+  `prototypeUrl` optional `http(s)://`. Messages in Russian.
+- Recommendations (`TaskMatcher`): team interests/skills/technologies vs. task text (industry name + card
+  without contact/format); words are lower-cased, stop words dropped, stem = first 5 letters.
+- The LLM call runs outside DB transactions; if the AI fails nothing is saved.
 - Errors (`GlobalExceptionHandler`, extends `ResponseEntityExceptionHandler`): body
-  `{status, error, message, timestamp, fieldErrors?}`, `message` in Russian. 400 validation / bad JSON / bad id
-  (with `fieldErrors`), 403 `LessonNotApprovedException`, 404 `LessonNotFoundException`,
-  502 `LlmAdaptationException`, 500 anything else. Standard MVC errors (405, 415, …) use the same format.
+  `{status, error, message, timestamp, fieldErrors?}`, `message` in Russian. 400 validation / bad JSON / bad
+  enum or id (with `fieldErrors`), 404 `NotFoundException`, 409 `InvalidStateException`,
+  502 `LlmFailureException`, 500 anything else. Standard MVC errors (405, 415, …) use the same format.
 - Swagger examples live in `controller/ApiExamples`; API info in `config/OpenApiConfig`.
 
 ## LLM layer
-- `LessonAdaptationService` calls `LlmClient`, validates the `AdaptedLesson` with Bean Validation
-  and retries once on an unparseable/invalid result, then throws `LlmAdaptationException`.
+- `LlmClient` has two functions: `analyze(draftText, industry) → TaskAnalysis` and
+  `buildCard(draftText, industry, answers) → TaskCard`.
+- `TaskAiService` validates the result with Bean Validation (≥ 3 questions, known field codes, field lengths)
+  and retries once on an unparseable/invalid result, then throws `LlmFailureException`. An unavailable LLM
+  (`LlmException`) is not retried.
 - `OpenAiLlmClient` uses Chat Completions via `RestClient` (no SDK) with
   `response_format: json_schema, strict: true`; timeout 60s (`qadam.llm.openai.timeout`).
+- `MockLlmClient` (default): deterministic, offline. Splits the draft into sentences and assigns each to a card
+  field by keywords (unmatched → `context`); title = first "need" sentence. Answers are appended to their field.
+  Never invents text. `analyze` asks about unfilled fields, topping up to 3 questions with the weakest fields.
 - Resources:
-  - `prompts/adapt-lesson.md` — system prompt; `{{profileName}}` / `{{profileRules}}` come from `AdaptationProfile`.
-  - `llm/adapted-lesson.schema.json` — strict JSON schema; keep it in sync with the DTO records
-    (`AdaptedLessonSchemaTest` checks this).
-  - `mock/<lesson>-<profile>.json` — prepared adaptations for the mock mode
-    («Круговорот воды в природе», «Части растения», and a `demo` stub for any other title).
-
-## Pictograms (ARASAAC)
-- `LessonAdaptationService` passes the validated lesson to `PictogramEnricher`, which sets
-  `Card.pictogramUrl` for all cards in parallel (virtual threads); not found → `null`.
-- `PictogramService.findPictogramUrl(word)` normalizes the word (trim, edge punctuation, lower case),
-  calls `GET https://api.arasaac.org/v1/pictograms/ru/search/{word}` and takes the first result's `_id`.
-  Image URL: `https://static.arasaac.org/pictograms/{id}/{id}_500.png`.
-  An unknown word returns HTTP 404 with `[]`.
-- In-memory cache per normalized word, including "not found". Network and 5xx errors are not cached.
-  Timeout 5s (`qadam.pictograms.timeout`). The service never throws; failures are logged as warnings.
-- License: ARASAAC pictograms are CC BY-NC-SA (non-commercial, share-alike).
-  **The frontend must show the ARASAAC attribution (README → Credits) in the footer of every page
-  that displays pictograms.**
+  - `prompts/analyze-task.md`, `prompts/build-card.md` — system prompts (English, answers in Russian).
+  - `llm/task-analysis.schema.json`, `llm/task-card.schema.json` — strict JSON schemas; keep them in sync with
+    the DTO records and `CardField` (`TaskSchemaTest` checks this).
 
 ## Code rules
-- English only in code, comments, identifiers, commit messages and PR descriptions.
+- English only in code, comments, identifiers, commit messages and PR descriptions
+  (user-facing messages and demo content are in Russian).
 - Commits follow Conventional Commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `build:`.
 - Secrets only via environment variables. Never commit keys, tokens or `.env`.
 - Every new service gets a unit test.
