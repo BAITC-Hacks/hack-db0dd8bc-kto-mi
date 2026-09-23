@@ -9,6 +9,10 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  web:
+    # User-facing messages (incl. default Bean Validation messages) are always in Russian
+    locale: ru
+    locale-resolver: fixed
   h2:
     console:
       enabled: true
@@ -30,3 +34,5 @@ qadam:
     enabled: ${PICTOGRAMS_ENABLED:true}
     locale: ru
     timeout: 5s
+  demo-data:
+    enabled: ${DEMO_DATA_ENABLED:true}

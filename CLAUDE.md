@@ -53,7 +53,33 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 - `OPENAI_MODEL` — OpenAI chat model, default `gpt-4o-mini` (must support structured output)
 - `PICTOGRAMS_ENABLED` → `qadam.pictograms.enabled`: `true` (default) or `false` to skip all ARASAAC requests
   (offline, tests)
+- `DEMO_DATA_ENABLED` → `qadam.demo-data.enabled`: `true` (default) creates two approved demo lessons
+  on startup if the DB is empty (`DemoDataLoader`, via the regular `LessonService`; texts in `DemoLessons`)
+- `spring.web.locale=ru` with a fixed locale resolver: default Bean Validation messages are always Russian.
+- Tests: `src/test/resources/application.properties` forces `mock` LLM, pictograms off and demo data off.
+  All Spring test contexts share `jdbc:h2:mem:qadam`, so tests clean the repository in `@BeforeEach`.
 - See `.env.example`. Local overrides go to `.env` / `application-local.yml` (both git-ignored).
+
+## REST API
+`LessonController` / `ProfileController` delegate to `LessonService` (lesson workflow; returns DTOs only).
+| Method & path                      | Result                                                                  |
+|------------------------------------|-------------------------------------------------------------------------|
+| `POST /api/lessons`                | `{title, text, profile}` → adapt (LLM + pictograms) → 201, `DRAFT`       |
+| `GET /api/lessons`                 | summaries `{id, title, profile, status, createdAt}`, newest first        |
+| `GET /api/lessons/{id}`            | full lesson with original text and adapted `content`                    |
+| `PUT /api/lessons/{id}/content`    | body `AdaptedLesson`; replaces content, status → `DRAFT`                 |
+| `POST /api/lessons/{id}/approve`   | status → `APPROVED`                                                     |
+| `POST /api/lessons/{id}/regenerate`| adapt the original text again, status → `DRAFT`                         |
+| `DELETE /api/lessons/{id}`         | 204                                                                     |
+| `GET /api/lessons/{id}/student`    | `{title, displaySettings, content}`; 403 unless `APPROVED`              |
+| `GET /api/profiles`                | `{code, name, displaySettings}` per `AdaptationProfile`                 |
+- Validation: title 3–120, text 50–5000 chars, profile required (Russian messages on `CreateLessonRequest`).
+- The LLM call runs outside DB transactions; if adaptation fails nothing is saved/changed.
+- Errors (`GlobalExceptionHandler`, extends `ResponseEntityExceptionHandler`): body
+  `{status, error, message, timestamp, fieldErrors?}`, `message` in Russian. 400 validation / bad JSON / bad id
+  (with `fieldErrors`), 403 `LessonNotApprovedException`, 404 `LessonNotFoundException`,
+  502 `LlmAdaptationException`, 500 anything else. Standard MVC errors (405, 415, …) use the same format.
+- Swagger examples live in `controller/ApiExamples`; API info in `config/OpenApiConfig`.
 
 ## LLM layer
 - `LessonAdaptationService` calls `LlmClient`, validates the `AdaptedLesson` with Bean Validation

@@ -19,7 +19,7 @@ public record Question(
 ) {
 
     @JsonIgnore
-    @AssertTrue(message = "correctIndex must point to an existing option")
+    @AssertTrue(message = "correctIndex должен указывать на существующий вариант ответа")
     public boolean isCorrectIndexValid() {
         return options != null && correctIndex >= 0 && correctIndex < options.size();
     }
