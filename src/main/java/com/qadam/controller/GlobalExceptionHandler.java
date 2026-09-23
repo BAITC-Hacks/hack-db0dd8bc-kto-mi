@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.qadam.dto.ErrorResponse;
 import com.qadam.dto.FieldErrorResponse;
-import com.qadam.service.LessonNotApprovedException;
-import com.qadam.service.LessonNotFoundException;
-import com.qadam.service.LlmAdaptationException;
+import com.qadam.service.InvalidStateException;
+import com.qadam.service.LlmFailureException;
+import com.qadam.service.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
@@ -38,25 +38,23 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     static final String VALIDATION_MESSAGE = "Проверьте правильность заполнения полей";
-    static final String NOT_APPROVED_MESSAGE =
-            "Урок ещё не утверждён учителем и пока недоступен ученику";
     static final String LLM_FAILURE_MESSAGE =
-            "Не удалось адаптировать текст урока. Попробуйте ещё раз чуть позже";
+            "Не удалось обработать задачу с помощью ИИ. Попробуйте ещё раз чуть позже";
     static final String INTERNAL_ERROR_MESSAGE = "Внутренняя ошибка сервера. Попробуйте ещё раз позже";
 
-    @ExceptionHandler(LessonNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(LessonNotFoundException e) {
-        return error(HttpStatus.NOT_FOUND, "Урок с id=" + e.getLessonId() + " не найден");
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, e.getUserMessage());
     }
 
-    @ExceptionHandler(LessonNotApprovedException.class)
-    public ResponseEntity<ErrorResponse> handleNotApproved(LessonNotApprovedException e) {
-        return error(HttpStatus.FORBIDDEN, NOT_APPROVED_MESSAGE);
+    @ExceptionHandler(InvalidStateException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidState(InvalidStateException e) {
+        return error(HttpStatus.CONFLICT, e.getUserMessage());
     }
 
-    @ExceptionHandler(LlmAdaptationException.class)
-    public ResponseEntity<ErrorResponse> handleLlmFailure(LlmAdaptationException e) {
-        log.error("Lesson adaptation failed: {}", e.getMessage(), e);
+    @ExceptionHandler(LlmFailureException.class)
+    public ResponseEntity<ErrorResponse> handleLlmFailure(LlmFailureException e) {
+        log.error("AI processing failed: {}", e.getMessage(), e);
         return error(HttpStatus.BAD_GATEWAY, LLM_FAILURE_MESSAGE);
     }
 
@@ -125,13 +123,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             case METHOD_NOT_ALLOWED -> "Этот HTTP-метод не поддерживается для данного адреса";
             case NOT_ACCEPTABLE -> "Сервер не может вернуть ответ в запрошенном формате";
             case UNSUPPORTED_MEDIA_TYPE -> "Неподдерживаемый формат запроса: отправляйте данные в формате JSON";
+            case CONFLICT -> "Действие недоступно в текущем состоянии";
             case PAYLOAD_TOO_LARGE -> "Запрос слишком большой";
             default -> status.is5xxServerError() ? INTERNAL_ERROR_MESSAGE : "Не удалось выполнить запрос";
         };
     }
 
     /**
-     * Builds a path like {@code quiz[0].correctIndex} from the location of a JSON mapping error.
+     * Builds a path like {@code answers[0].field} from the location of a JSON mapping error.
      */
     private static String fieldPath(JsonMappingException e) {
         StringBuilder path = new StringBuilder();

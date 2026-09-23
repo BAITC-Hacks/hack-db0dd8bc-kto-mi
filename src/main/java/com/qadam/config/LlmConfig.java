@@ -1,7 +1,7 @@
 package com.qadam.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.qadam.llm.AdaptationPrompt;
+import com.qadam.llm.TaskPrompts;
 import com.qadam.llm.LlmClient;
 import com.qadam.llm.mock.MockLlmClient;
 import com.qadam.llm.openai.OpenAiLlmClient;
@@ -26,7 +26,7 @@ public class LlmConfig {
     public LlmClient llmClient(LlmProperties properties, ObjectMapper objectMapper,
                                RestClient.Builder restClientBuilder) {
         return switch (properties.mode()) {
-            case MOCK -> new MockLlmClient(objectMapper);
+            case MOCK -> new MockLlmClient();
             case OPENAI -> openAiClient(properties.openai(), objectMapper, restClientBuilder);
         };
     }
@@ -48,6 +48,6 @@ public class LlmConfig {
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openai.apiKey())
                 .requestFactory(requestFactory)
                 .build();
-        return new OpenAiLlmClient(restClient, openai.model(), new AdaptationPrompt(), objectMapper);
+        return new OpenAiLlmClient(restClient, openai.model(), new TaskPrompts(), objectMapper);
     }
 }

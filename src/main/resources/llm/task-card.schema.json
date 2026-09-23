@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "context", "need", "users", "data", "constraints", "expectedResult", "successCriteria", "contact", "interactionFormat"],
+  "properties": {
+    "title": { "type": "string" },
+    "context": { "type": "string" },
+    "need": { "type": "string" },
+    "users": { "type": "string" },
+    "data": { "type": "string" },
+    "constraints": { "type": "string" },
+    "expectedResult": { "type": "string" },
+    "successCriteria": { "type": "string" },
+    "contact": { "type": "string" },
+    "interactionFormat": { "type": "string" }
+  }
+}

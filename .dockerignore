@@ -1,0 +1,40 @@
+# Build output
+target/
+out/
+
+# VCS and CI
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# Local config and secrets
+.env
+.env.*
+application-local.*
+
+# Docs and agent notes (root only: src/main/resources/prompts/*.md is needed)
+/README.md
+/CLAUDE.md
+/AGENTS.md
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Misc
+*.log
+*.db
+.DS_Store
+Thumbs.db
