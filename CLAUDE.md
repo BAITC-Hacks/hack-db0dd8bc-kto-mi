@@ -9,6 +9,12 @@ Flow:
 3. The teacher reviews and approves the material.
 4. The child sees the approved material in a simple interface.
 
+## Project name
+- The project is called **Qadam** (Kazakh for "step"): a child learns step by step, at their own pace.
+- Hackathon team: «Kto mi?». The repository is named `hack-db0dd8bc-kto-mi`, but the UI,
+  README and all documentation always use the name Qadam.
+- Slogan: «Qadam — каждый урок понятен каждому ребёнку».
+
 ## Stack
 - Java 21, Spring Boot 3.5, Maven (via Maven Wrapper)
 - Spring Web, Validation, Data JPA, H2 (in-memory)
@@ -25,7 +31,7 @@ Flow:
 | `model`      | JPA entities                                                 |
 | `repository` | Spring Data JPA repositories                                 |
 | `service`    | Business logic (adaptation workflow, teacher approval)       |
-| `llm`        | LLM client abstraction: `mock` and `openai` implementations  |
+| `llm`        | `LlmClient` abstraction, prompt; `llm.mock` and `llm.openai` implementations |
 | `pictogram`  | Pictogram lookup for cards                                   |
 
 ## Commands (Windows / PowerShell)
@@ -42,9 +48,22 @@ On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 `$env:JAVA_HOME="$env:USERPROFILE\.jdks\openjdk-25.0.1"`.
 
 ## Configuration
-- `LLM_MODE` — `mock` (default, no network) or `openai`
-- `OPENAI_API_KEY` — required only when `LLM_MODE=openai`
+- `LLM_MODE` → `qadam.llm.mode`: `mock` (default, no network) or `openai`
+- `OPENAI_API_KEY` — required only when `LLM_MODE=openai`; the app refuses to start without it
+- `OPENAI_MODEL` — OpenAI chat model, default `gpt-4o-mini` (must support structured output)
 - See `.env.example`. Local overrides go to `.env` / `application-local.yml` (both git-ignored).
+
+## LLM layer
+- `LessonAdaptationService` calls `LlmClient`, validates the `AdaptedLesson` with Bean Validation
+  and retries once on an unparseable/invalid result, then throws `LlmAdaptationException`.
+- `OpenAiLlmClient` uses Chat Completions via `RestClient` (no SDK) with
+  `response_format: json_schema, strict: true`; timeout 60s (`qadam.llm.openai.timeout`).
+- Resources:
+  - `prompts/adapt-lesson.md` — system prompt; `{{profileName}}` / `{{profileRules}}` come from `AdaptationProfile`.
+  - `llm/adapted-lesson.schema.json` — strict JSON schema; keep it in sync with the DTO records
+    (`AdaptedLessonSchemaTest` checks this).
+  - `mock/<lesson>-<profile>.json` — prepared adaptations for the mock mode
+    («Круговорот воды в природе», «Части растения», and a `demo` stub for any other title).
 
 ## Code rules
 - English only in code, comments, identifiers, commit messages and PR descriptions.

@@ -23,3 +23,6 @@ qadam:
     mode: ${LLM_MODE:mock}
     openai:
       api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-4o-mini}
+      timeout: 60s
+      base-url: https://api.openai.com/v1

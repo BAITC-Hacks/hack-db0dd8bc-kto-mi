@@ -1,0 +1,48 @@
+{
+  "sentences": [
+    { "text": "У растения есть несколько частей.", "keywords": ["частей"], "section": null },
+    { "text": "Каждая часть растения делает свою работу.", "keywords": ["работу"], "section": null },
+    { "text": "Корень находится в земле.", "keywords": ["Корень", "земле"], "section": null },
+    { "text": "Корень крепко держит растение в земле.", "keywords": ["держит"], "section": null },
+    { "text": "Корень берёт воду из земли.", "keywords": ["воду"], "section": null },
+    { "text": "Над землёй растёт стебель.", "keywords": ["стебель"], "section": null },
+    { "text": "Стебель держит листья и цветы.", "keywords": ["листья", "цветы"], "section": null },
+    { "text": "По стеблю вода идёт от корня к листьям.", "keywords": ["вода", "идёт"], "section": null },
+    { "text": "Листья у растения зелёные.", "keywords": ["Листья", "зелёные"], "section": null },
+    { "text": "Листья получают свет от Солнца.", "keywords": ["свет"], "section": null },
+    { "text": "На свету листья делают питание для растения.", "keywords": ["питание"], "section": null },
+    { "text": "Из цветка появляется плод.", "keywords": ["цветка", "плод"], "section": null },
+    { "text": "В плоде есть семена.", "keywords": ["семена"], "section": null },
+    { "text": "Из семени вырастает новое растение.", "keywords": ["вырастает"], "section": null }
+  ],
+  "cards": [
+    { "word": "корень", "explanation": "Корень держит растение в земле и берёт воду.", "pictogramUrl": null },
+    { "word": "стебель", "explanation": "Стебель держит листья и цветы.", "pictogramUrl": null },
+    { "word": "лист", "explanation": "Лист получает свет и делает питание для растения.", "pictogramUrl": null },
+    { "word": "цветок", "explanation": "Из цветка появляется плод.", "pictogramUrl": null },
+    { "word": "плод", "explanation": "В плоде есть семена.", "pictogramUrl": null },
+    { "word": "семя", "explanation": "Из семени вырастает новое растение.", "pictogramUrl": null }
+  ],
+  "quiz": [
+    {
+      "question": "Где находится корень?",
+      "options": ["В земле", "На цветке", "В небе"],
+      "correctIndex": 0
+    },
+    {
+      "question": "Что держит листья и цветы?",
+      "options": ["Корень", "Стебель", "Семя"],
+      "correctIndex": 1
+    },
+    {
+      "question": "Что листья получают от Солнца?",
+      "options": ["Дождь", "Ветер", "Свет"],
+      "correctIndex": 2
+    },
+    {
+      "question": "Что вырастает из семени?",
+      "options": ["Новое растение", "Камень", "Облако"],
+      "correctIndex": 0
+    }
+  ]
+}
