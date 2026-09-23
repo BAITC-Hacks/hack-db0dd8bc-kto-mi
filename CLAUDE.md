@@ -47,6 +47,24 @@ JDK: the build targets Java 21 (`maven.compiler.release=21`) and works with any 
 On this machine only JDK 25 is installed, so set JAVA_HOME for the session:
 `$env:JAVA_HOME="$env:USERPROFILE\.jdks\openjdk-25.0.1"`.
 
+## CI and Docker
+- CI: `.github/workflows/ci.yml` (GitHub Actions) runs on push to `main` and on every pull request:
+  Temurin JDK 21 with Maven cache, `./mvnw -B -ntp clean verify`, env `LLM_MODE=mock`,
+  `PICTOGRAMS_ENABLED=false`, `DEMO_DATA_ENABLED=false` (tests must never need the network).
+  The JaCoCo report is uploaded as the `jacoco-report` build artifact.
+- Coverage: `jacoco-maven-plugin` in `pom.xml`, report at `target/site/jacoco/index.html` on `verify`.
+  No coverage threshold — the build must not fail on coverage.
+- `mvnw` must stay executable (git mode `100755`) with LF endings (`.gitattributes`).
+- `Dockerfile` (multi-stage): `eclipse-temurin:21-jdk` builds the jar via the Maven Wrapper with
+  `-DskipTests` (tests run in CI); runtime is `eclipse-temurin:21-jre-alpine` as non-root user `qadam`,
+  port 8080, JVM flags via `JAVA_OPTS`. Keep `.dockerignore` up to date (no `target`, `.git`, `.idea`, `.env`).
+- `docker-compose.yml`: service `qadam`, `8080:8080`, `LLM_MODE` (default `mock`), `OPENAI_API_KEY`,
+  `OPENAI_MODEL`, `PICTOGRAMS_ENABLED` (default `true`), `DEMO_DATA_ENABLED` — taken from `.env` if present;
+  healthcheck `wget` on `/api/health`.
+  ```bash
+  docker compose up --build
+  ```
+
 ## Configuration
 - `LLM_MODE` → `qadam.llm.mode`: `mock` (default, no network) or `openai`
 - `OPENAI_API_KEY` — required only when `LLM_MODE=openai`; the app refuses to start without it

@@ -1,4 +1,7 @@
 # hack-db0dd8bc-kto-mi
+
+[![CI](https://github.com/BAITC-Hacks/hack-db0dd8bc-kto-mi/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/BAITC-Hacks/hack-db0dd8bc-kto-mi/actions/workflows/ci.yml)
+
 Hackathon team repository for Kto mi?
 
 ## Qadam
@@ -10,15 +13,47 @@ Hackathon team repository for Kto mi?
 
 **Стек:** Java 21, Spring Boot 3, Maven, H2, Swagger UI.
 
-### Запуск (Windows)
+### Быстрый старт
+
+По умолчанию приложение работает в mock-режиме: LLM не вызывается, ключ OpenAI не нужен.
+
+**Вариант 1. Docker Compose** (нужен только Docker):
+
+```bash
+docker compose up --build
+```
+
+Контейнер считается здоровым, когда отвечает `GET /api/health`. Остановить: `docker compose down`.
+
+**Вариант 2. Maven Wrapper** (нужен JDK 21 или новее):
 
 ```powershell
-$env:LLM_MODE="mock"         # или "openai" + $env:OPENAI_API_KEY="..." (см. .env.example)
-.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run      # Windows
 ```
+
+```bash
+./mvnw spring-boot:run          # Linux / macOS
+```
+
+После запуска:
 
 - Health check: http://localhost:8080/api/health
 - Swagger UI: http://localhost:8080/swagger-ui.html
+
+**Режим OpenAI.** Скопируйте `.env.example` в `.env` и укажите:
+
+```dotenv
+LLM_MODE=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+```
+
+`docker compose` читает `.env` автоматически. При запуске через Maven задайте те же переменные
+в окружении (например, `$env:LLM_MODE="openai"; $env:OPENAI_API_KEY="sk-..."`).
+Без ключа в режиме `openai` приложение не стартует. `.env` в git не коммитится.
+
+Сборка и тесты: `.\mvnw.cmd clean verify`. Тесты работают без сети, отчёт о покрытии —
+`target/site/jacoco/index.html`.
 
 При старте в пустую базу добавляются два утверждённых демо-урока: «Круговорот воды в природе» (дислексия)
 и «Части растения» (аутизм). Отключить: `$env:DEMO_DATA_ENABLED="false"`.
